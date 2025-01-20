@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest{
         "start_url": "/",
         "display": "standalone",
         "background_color": "#0099e6",
-        "theme_color": "#0033cc",
+        "theme_color": "#cb60fc",
         "description": "En enkel handleliste-app",
         "icons": [
             {
