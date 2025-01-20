@@ -2,10 +2,23 @@
 import { useState, useEffect } from "react";
 import { useShoppingList } from "./useShoppingList";
 import styles from "./page.module.css";
+import PullToRefresh from "pulltorefreshjs"
 
 export default function Home() {
     const { items, loading, addItem, toggleItem, deleteItem } = useShoppingList();
     const [newItem, setNewItem] = useState("");
+
+    useEffect(() => {
+        const standalone = window.matchMedia("(display-mode: standalone)").matches
+
+        if (standalone) {
+            PullToRefresh.init({
+                onRefresh() {
+                    window.location.reload()
+                },
+            })
+        }
+    }, []);
 
     useEffect(() => {
         if (!loading) {
