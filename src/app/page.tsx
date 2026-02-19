@@ -1,35 +1,51 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShoppingList } from "./useShoppingList";
 import styles from "./page.module.css";
-import PullToRefresh from "pulltorefreshjs"
+import PullToRefresh from "pulltorefreshjs";
 
 export default function Home() {
-    const { items, loading, addItem, toggleItem, deleteItem } = useShoppingList();
+    const { items, loading, error, addItem, toggleItem, deleteItem } = useShoppingList();
     const [newItem, setNewItem] = useState("");
+    const hasCleanedCheckedItems = useRef(false);
+
+    async function submitNewItem() {
+        if (newItem.trim() === "") {
+            return;
+        }
+
+        await addItem(newItem);
+        setNewItem("");
+    }
 
     useEffect(() => {
-        const standalone = window.matchMedia("(display-mode: standalone)").matches
+        const standalone = window.matchMedia("(display-mode: standalone)").matches;
 
         if (standalone) {
             PullToRefresh.init({
                 onRefresh() {
-                    window.location.reload()
+                    window.location.reload();
                 },
-            })
+            });
         }
+
+        return () => {
+            PullToRefresh.destroyAll();
+        };
     }, []);
 
     useEffect(() => {
-        if (!loading) {
-            // Slett alle varer der "checked" er true
-            items.forEach((item) => {
-                if (item.checked) {
-                    deleteItem(item.id);
-                }
-            });
+        if (loading || hasCleanedCheckedItems.current) {
+            return;
         }
-    }, [loading]);
+
+        hasCleanedCheckedItems.current = true;
+        items.forEach((item) => {
+            if (item.checked) {
+                void deleteItem(item.id);
+            }
+        });
+    }, [deleteItem, items, loading]);
 
     if (loading) {
         return <div>Laster handleliste...</div>;
@@ -38,6 +54,7 @@ export default function Home() {
     return (
         <main style={{padding: "1rem"}} className={styles.page}>
             <h1>Handleliste</h1>
+            {error ? <p style={{color: "#d00000"}}>{error}</p> : null}
             <ul className={styles.toDoList}>
                 {items.map((item) => (
                     <li key={item.id} className={styles.toDoList__item}>
@@ -62,8 +79,12 @@ export default function Home() {
                     onChange={(e) => setNewItem(e.target.value)}
                     onBlur={() => {
                         if (newItem.trim() !== "") {
-                            addItem(newItem);
-                            setNewItem("");
+                            void submitNewItem();
+                        }
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            void submitNewItem();
                         }
                     }}
                 />

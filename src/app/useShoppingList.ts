@@ -1,15 +1,17 @@
 // useShoppingList.ts
 "use client";
 import { useState, useEffect } from "react";
-import { db } from "./firebase";   // Viktig: importér "db" fra firebase.ts
+import { FirebaseError } from "firebase/app";
+import { User, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import { auth, db } from "./firebase";
 import {
-    collection,
-    query,
-    onSnapshot,
     addDoc,
-    updateDoc,
+    collection,
+    deleteDoc,
     doc,
-    deleteDoc
+    onSnapshot,
+    serverTimestamp,
+    updateDoc,
 } from "firebase/firestore";
 
 // Typen for en vare:
@@ -22,42 +24,124 @@ type Item = {
 export function useShoppingList() {
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(true);
+    const [authReady, setAuthReady] = useState(false);
+    const [user, setUser] = useState<User | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const listId = process.env.NEXT_PUBLIC_LIST_ID ?? "main";
+
+    function getErrorMessage(snapshotError: unknown) {
+        if (snapshotError instanceof FirebaseError && snapshotError.code === "permission-denied") {
+            return "Mangler tilgang til databasen. Sjekk at Anonymous Auth er aktivert og at Firestore-reglene er oppdatert.";
+        }
+
+        if (snapshotError instanceof FirebaseError) {
+            return `Databasefeil (${snapshotError.code}).`;
+        }
+
+        return "Ukjent databasefeil.";
+    }
 
     useEffect(() => {
-        const itemsRef = collection(db, "/items");
-        const q = query(itemsRef);
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+                setAuthReady(true);
+                return;
+            }
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...(doc.data() as Omit<Item, "id">),
-            }));
-            setItems(data);
-            setLoading(false);
+            try {
+                await signInAnonymously(auth);
+            } catch (signinError) {
+                setError(getErrorMessage(signinError));
+                setAuthReady(true);
+            }
         });
 
         return () => unsubscribe();
     }, []);
 
+    useEffect(() => {
+        if (!authReady) {
+            return;
+        }
+
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        const unsubscribe = onSnapshot(
+            collection(db, "lists", listId, "items"),
+            (snapshot) => {
+                const data = snapshot.docs.map((itemDoc) => ({
+                    id: itemDoc.id,
+                    ...(itemDoc.data() as Omit<Item, "id">),
+                }));
+                setItems(data);
+                setError(null);
+                setLoading(false);
+            },
+            (snapshotError) => {
+                setError(getErrorMessage(snapshotError));
+                setLoading(false);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [authReady, listId, user]);
+
     // Legg til et nytt item
     async function addItem(name: string) {
-        const itemsRef = collection(db, "/items");
-        await addDoc(itemsRef, {
-            name,
-            checked: false,
-        });
+        if (!user) {
+            setError("Ikke innlogget i Firebase.");
+            return;
+        }
+
+        const trimmedName = name.trim();
+        if (!trimmedName) {
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, "lists", listId, "items"), {
+                name: trimmedName,
+                checked: false,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            });
+        } catch (addError) {
+            setError(getErrorMessage(addError));
+        }
     }
 
     // Toggle av/på (checked)
     async function toggleItem(id: string, checked: boolean) {
-        const docRef = doc(db, "/items", id);
-        await updateDoc(docRef, { checked: !checked });
+        if (!user) {
+            setError("Ikke innlogget i Firebase.");
+            return;
+        }
+
+        try {
+            await updateDoc(doc(db, "lists", listId, "items", id), { checked: !checked, updatedAt: serverTimestamp() });
+        } catch (toggleError) {
+            setError(getErrorMessage(toggleError));
+        }
     }
 
-    async function deleteItem(id: string){
-        const docRef = doc(db, "/items", id);
-        await deleteDoc(docRef);
+    async function deleteItem(id: string) {
+        if (!user) {
+            setError("Ikke innlogget i Firebase.");
+            return;
+        }
+
+        try {
+            await deleteDoc(doc(db, "lists", listId, "items", id));
+        } catch (deleteError) {
+            setError(getErrorMessage(deleteError));
+        }
     }
 
-    return { items, loading, addItem, toggleItem, deleteItem };
+    return { items, loading: loading || !authReady, error, addItem, toggleItem, deleteItem };
 }
