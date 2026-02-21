@@ -48,47 +48,56 @@ export default function Home() {
     }, [deleteItem, items, loading]);
 
     if (loading) {
-        return <div>Laster handleliste...</div>;
+        return (
+            <main className={styles.page}>
+                <section className={styles.shell}>
+                    <p className={styles.loading}>Laster handleliste...</p>
+                </section>
+            </main>
+        );
     }
 
     return (
-        <main style={{padding: "1rem"}} className={styles.page}>
-            <h1>Handleliste</h1>
-            {error ? <p style={{color: "#d00000"}}>{error}</p> : null}
-            <ul className={styles.toDoList}>
-                {items.map((item) => (
-                    <li key={item.id} className={styles.toDoList__item}>
-                        <label style={{textDecoration: item.checked ? "line-through" : ""}}>
-                            <input
-                                type="checkbox"
-                                checked={item.checked}
-                                onChange={() => toggleItem(item.id, item.checked)}
-                            />
-                            <span>
-              {item.name}
-                </span>
-                        </label>
-                    </li>
-                ))}
-            </ul>
-            <div className={styles.toDoInput}>
-                <input
-                    type="text"
-                    placeholder="Legg til vare"
-                    value={newItem}
-                    onChange={(e) => setNewItem(e.target.value)}
-                    onBlur={() => {
-                        if (newItem.trim() !== "") {
-                            void submitNewItem();
-                        }
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            void submitNewItem();
-                        }
-                    }}
-                />
-            </div>
+        <main className={styles.page}>
+            <section className={styles.shell}>
+                <header className={styles.header}>
+                    <h1 className={styles.title}>Handleliste</h1>
+                    <p className={styles.subtitle}>{items.length} varer</p>
+                </header>
+                {error ? <p className={styles.error}>{error}</p> : null}
+                <ul className={styles.toDoList}>
+                    {items.map((item) => (
+                        <li key={item.id} className={styles.toDoList__item}>
+                            <label className={styles.itemLabel}>
+                                <input
+                                    type="checkbox"
+                                    checked={item.checked}
+                                    onChange={() => toggleItem(item.id, item.checked)}
+                                />
+                                <span className={`${styles.itemText} ${item.checked ? styles.itemTextChecked : ""}`}>{item.name}</span>
+                            </label>
+                        </li>
+                    ))}
+                </ul>
+                <div className={styles.toDoInput}>
+                    <input
+                        type="text"
+                        placeholder="Legg til vare"
+                        value={newItem}
+                        onChange={(e) => setNewItem(e.target.value)}
+                        onBlur={() => {
+                            if (newItem.trim() !== "") {
+                                void submitNewItem();
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                void submitNewItem();
+                            }
+                        }}
+                    />
+                </div>
+            </section>
         </main>
     );
 }

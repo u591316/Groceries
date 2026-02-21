@@ -23,7 +23,9 @@ a {
 
 body {
   line-height: 1.5;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  color: #2f2445;
+  background-color: #f3ecff;
 }
 
 img,
@@ -73,5 +75,5 @@ a {
 
 
 :root {
-  --ff-primary: "Geist Sans";
+  color-scheme: light;
 }
