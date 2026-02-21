@@ -1,25 +1,31 @@
-import type { MetadataRoute } from 'next'
+import type { MetadataRoute } from "next";
 
-export default function manifest(): MetadataRoute.Manifest{
-    return {
-        "name": "ShoppingList",
-        "short_name": "ShpLst",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#0099e6",
-        "theme_color": "#cb60fc",
-        "description": "En enkel handleliste-app",
-        "icons": [
-            {
-                "src": "/appicon.png",
-                "sizes": "192x192",
-                "type": "image/png"
-            },
-            {
-                "src": "/appicon.png",
-                "sizes": "512x512",
-                "type": "image/png"
-            }
-        ]
-    }
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "Huskel",
+    short_name: "Huskel",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#eadbff",
+    theme_color: "#9c6ae1",
+    description: "En enkel handleliste-app",
+    icons: [
+      {
+        src: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        src: "/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+      {
+        src: "/icon-512-maskable.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+    ],
+  };
 }

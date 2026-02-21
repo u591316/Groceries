@@ -61,7 +61,9 @@ export default function Home() {
         <main className={styles.page}>
             <section className={styles.shell}>
                 <header className={styles.header}>
-                    <h1 className={styles.title}>Handleliste</h1>
+                    <h1 className={styles.title}>
+                        Handleliste <span className={styles.titleEmoji}>👩‍❤️‍💋‍👨</span>
+                    </h1>
                     <p className={styles.subtitle}>{items.length} varer</p>
                 </header>
                 {error ? <p className={styles.error}>{error}</p> : null}

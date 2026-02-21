@@ -2,7 +2,7 @@
   min-height: 100svh;
   padding: clamp(1rem, 3vw, 2rem);
   background:
-    radial-gradient(circle at 10% 10%, #f7efff 0%, #f3ecff 35%, #efe7ff 100%);
+    radial-gradient(circle at 10% 10%, #f5eaff 0%, #efe0ff 35%, #e8d6ff 100%);
   display: flex;
   justify-content: center;
 }
@@ -27,8 +27,17 @@
 }
 
 .title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-size: clamp(1.45rem, 3.8vw, 2rem);
   letter-spacing: -0.02em;
+}
+
+.titleEmoji {
+  font-size: 0.9em;
+  line-height: 1;
+  transform: translateY(1px);
 }
 
 .subtitle {
