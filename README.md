@@ -1,43 +1,49 @@
-# Huskel (felles handleliste)
+# Huskel
 
-Dette prosjektet er en Next.js-app som bruker Firebase Firestore.
+En liten Next.js-app for delt handleliste med Firebase Firestore som backend.
 
-## Hva som var feil
+## Stack
 
-Firestore i testmodus slår seg ofte av etter en periode, og da får appen `permission-denied`.
+- Next.js 15
+- React 19
+- Firebase Auth (anonymous)
+- Firestore
+- PWA via `next-pwa`
 
-## Hva som er fikset i koden
+## Krav
 
-- Appen logger inn med Firebase Anonymous Auth automatisk.
-- Data ligger nå i `lists/{LIST_ID}/items` (delt liste).
-- Brukervennlige feilmeldinger vises i UI ved manglende tilgang.
-- Firestore-regler ligger i `firestore.rules`.
+- Node.js 20 eller nyere
+- `npm`
+- Et Firebase-prosjekt med Firestore og Anonymous Auth aktivert
 
-## 1) Lag lokal env-fil
+## Miljovariabler
+
+Opprett lokal env-fil:
 
 ```bash
 cp .env.example .env.local
 ```
 
-`NEXT_PUBLIC_LIST_ID` må være samme verdi på begge telefoner, f.eks. `huskel-lista`.
+Innhold:
 
-## 2) Aktiver Firebase Anonymous Auth
+```bash
+NEXT_PUBLIC_LIST_ID=huskel-lista
+```
 
-I Firebase Console for prosjektet `groceries-90029`:
+`NEXT_PUBLIC_LIST_ID` er id-en for den delte lista. Alle som skal se samme data ma bruke samme verdi.
 
-1. Gå til `Authentication`.
-2. Gå til `Sign-in method`.
-3. Aktiver `Anonymous`.
+## Forstegangsoppsett
 
-## 3) Publiser Firestore-regler
+1. Installer dependencies:
 
-### Alternativ A: Firebase Console
+```bash
+npm install
+```
 
-1. Gå til `Firestore Database` -> `Rules`.
-2. Lim inn innholdet fra `firestore.rules`.
-3. Trykk `Publish`.
+2. Aktiver `Anonymous` i Firebase Console:
+   `Authentication -> Sign-in method -> Anonymous`
 
-### Alternativ B: Firebase CLI
+3. Publiser Firestore-reglene fra prosjektet:
 
 ```bash
 npm i -g firebase-tools
@@ -46,15 +52,79 @@ firebase use groceries-90029
 firebase deploy --only firestore:rules
 ```
 
-## 4) Kjør lokalt
+Hvis du ikke vil bruke CLI kan du lime inn innholdet fra `firestore.rules` manuelt i Firebase Console under `Firestore Database -> Rules`.
+
+## Kjor lokalt
+
+Start dev-server:
 
 ```bash
-npm install
 npm run dev
 ```
 
-Åpne `http://localhost:3000`.
+Appen blir tilgjengelig pa [http://localhost:3000](http://localhost:3000).
 
-## 5) Deploy
+## Bygg for produksjon
 
-Deploy samme kodebase som huskel.app peker på (f.eks. Vercel). Begge enheter må bruke samme deploy + samme `NEXT_PUBLIC_LIST_ID`.
+```bash
+npm run build
+```
+
+For aa starte produksjonsbygget lokalt:
+
+```bash
+npm run start
+```
+
+## Kvalitetssjekker
+
+Prosjektet har ikke egne automatiserte tester enda. Dette er kommandoene som brukes som sjekk i dag:
+
+Lint:
+
+```bash
+npm run lint
+```
+
+TypeScript-sjekk:
+
+```bash
+npx tsc --noEmit
+```
+
+Anbefalt sjekkrutine for en endring:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+## Datamodell
+
+Firestore bruker disse stiene:
+
+- `lists/{LIST_ID}/tabs`
+- `lists/{LIST_ID}/items`
+
+Standardfanen har id `default` og kan ikke slettes. Andre faner kan opprettes og slettes i UI-et.
+
+## Deploy
+
+Prosjektet er satt opp for Vercel.
+
+Det viktigste i produksjon:
+
+- `NEXT_PUBLIC_LIST_ID` ma settes i Vercel under `Settings -> Environment Variables`
+- Firestore-reglene ma vaere publisert
+- Firebase Anonymous Auth ma vaere aktivert
+
+Ved deploy fra Git bygger Vercel normalt automatisk når du pusher til production-branchen.
+
+## Nyttige filer
+
+- `src/app/page.tsx`: hoved-UI
+- `src/app/useShoppingList.ts`: Firebase-logikk, tabs og items
+- `src/app/manifest.ts`: PWA-manifest
+- `firestore.rules`: Firestore security rules
+- `src/app/firebase.ts`: Firebase-klientoppsett

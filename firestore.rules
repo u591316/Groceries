@@ -9,25 +9,78 @@ service cloud.firestore {
       return id.matches('^[a-zA-Z0-9_-]{3,64}$');
     }
 
+    function isValidTabId(id) {
+      return id == 'default' || id.matches('^[A-Za-z0-9_-]{10,}$');
+    }
+
+    function isValidTabName(name) {
+      return name is string
+        && name.size() > 0
+        && name.size() <= 40;
+    }
+
+    function isValidItemName(name) {
+      return name is string
+        && name.size() > 0
+        && name.size() <= 120;
+    }
+
+    function isValidTabData() {
+      return request.resource.data.keys().hasOnly(['name', 'isDefault', 'createdAt', 'updatedAt'])
+        && isValidTabName(request.resource.data.name)
+        && request.resource.data.isDefault is bool;
+    }
+
+    function isValidItemData() {
+      return request.resource.data.keys().hasOnly(['name', 'checked', 'tabId', 'createdAt', 'updatedAt'])
+        && isValidItemName(request.resource.data.name)
+        && request.resource.data.checked is bool
+        && request.resource.data.tabId is string
+        && isValidTabId(request.resource.data.tabId);
+    }
+
+    match /lists/{listId}/tabs/{tabId} {
+      allow read: if isSignedIn() && isValidListId(listId);
+
+      allow create: if isSignedIn()
+        && isValidListId(listId)
+        && isValidTabId(tabId)
+        && isValidTabData()
+        && (tabId == 'default') == request.resource.data.isDefault;
+
+      allow update: if isSignedIn()
+        && isValidListId(listId)
+        && isValidTabId(tabId)
+        && isValidTabData()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (tabId == 'default') == request.resource.data.isDefault;
+
+      allow delete: if isSignedIn()
+        && isValidListId(listId)
+        && tabId != 'default'
+        && resource.data.isDefault == false;
+    }
+
     match /lists/{listId}/items/{itemId} {
       allow read: if isSignedIn() && isValidListId(listId);
 
       allow create: if isSignedIn()
         && isValidListId(listId)
-        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt', 'updatedAt'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 120
-        && request.resource.data.checked is bool;
+        && isValidItemData();
 
       allow update: if isSignedIn()
         && isValidListId(listId)
-        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt', 'updatedAt'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 120
+        && request.resource.data.keys().hasOnly(['name', 'checked', 'tabId', 'createdAt', 'updatedAt'])
+        && isValidItemName(request.resource.data.name)
         && request.resource.data.checked is bool
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          !request.resource.data.keys().hasAny(['tabId'])
+          || (
+            request.resource.data.tabId is string
+            && isValidTabId(request.resource.data.tabId)
+          )
+        );
 
       allow delete: if isSignedIn() && isValidListId(listId);
     }

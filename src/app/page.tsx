@@ -1,21 +1,46 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useShoppingList } from "./useShoppingList";
-import styles from "./page.module.css";
 import PullToRefresh from "pulltorefreshjs";
+import styles from "./page.module.css";
+import { DEFAULT_TAB_ID, useShoppingList } from "./useShoppingList";
 
 export default function Home() {
-    const { items, loading, error, addItem, toggleItem, deleteItem } = useShoppingList();
+    const { tabs, items, loading, error, addItem, toggleItem, deleteItem, createTab, deleteTab } = useShoppingList();
     const [newItem, setNewItem] = useState("");
-    const hasCleanedCheckedItems = useRef(false);
+    const [activeTabId, setActiveTabId] = useState(DEFAULT_TAB_ID);
+    const cleanedTabs = useRef<Set<string>>(new Set());
+
+    const activeItems = items.filter((item) => (item.tabId ?? DEFAULT_TAB_ID) === activeTabId);
 
     async function submitNewItem() {
         if (newItem.trim() === "") {
             return;
         }
 
-        await addItem(newItem);
+        await addItem(newItem, activeTabId);
         setNewItem("");
+    }
+
+    async function handleCreateTab() {
+        const tabName = window.prompt("Hva skal fanen hete?");
+        if (!tabName) {
+            return;
+        }
+
+        const tabId = await createTab(tabName);
+        if (tabId) {
+            setActiveTabId(tabId);
+        }
+    }
+
+    async function handleDeleteTab(tabId: string, tabName: string) {
+        const confirmed = window.confirm(`Vil du slette fanen "${tabName}"?`);
+        if (!confirmed) {
+            return;
+        }
+
+        await deleteTab(tabId);
+        setActiveTabId(DEFAULT_TAB_ID);
     }
 
     useEffect(() => {
@@ -35,17 +60,24 @@ export default function Home() {
     }, []);
 
     useEffect(() => {
-        if (loading || hasCleanedCheckedItems.current) {
+        const activeTabExists = tabs.some((tab) => tab.id === activeTabId);
+        if (!activeTabExists) {
+            setActiveTabId(DEFAULT_TAB_ID);
+        }
+    }, [activeTabId, tabs]);
+
+    useEffect(() => {
+        if (loading || cleanedTabs.current.has(activeTabId)) {
             return;
         }
 
-        hasCleanedCheckedItems.current = true;
-        items.forEach((item) => {
+        cleanedTabs.current.add(activeTabId);
+        activeItems.forEach((item) => {
             if (item.checked) {
                 void deleteItem(item.id);
             }
         });
-    }, [deleteItem, items, loading]);
+    }, [activeItems, activeTabId, deleteItem, loading]);
 
     if (loading) {
         return (
@@ -60,15 +92,56 @@ export default function Home() {
     return (
         <main className={styles.page}>
             <section className={styles.shell}>
-                <header className={styles.header}>
-                    <h1 className={styles.title}>
-                        Handleliste <span className={styles.titleEmoji}>👩‍❤️‍💋‍👨</span>
-                    </h1>
-                    <p className={styles.subtitle}>{items.length} varer</p>
-                </header>
+                <div className={styles.tabsRow}>
+                    <div className={styles.tabsScroller}>
+                        <ul className={styles.tabs}>
+                            {tabs.map((tab) => {
+                                const isActive = tab.id === activeTabId;
+
+                                return (
+                                    <li
+                                        key={tab.id}
+                                        className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ""}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            className={styles.tabButton}
+                                            onClick={() => setActiveTabId(tab.id)}
+                                        >
+                                            {tab.name}
+                                            {tab.id === DEFAULT_TAB_ID ? (
+                                                <span className={styles.titleEmoji}>👩‍❤️‍💋‍👨</span>
+                                            ) : null}
+                                        </button>
+                                        {!tab.isDefault ? (
+                                            <button
+                                                type="button"
+                                                className={styles.tabRemove}
+                                                aria-label={`Slett fanen ${tab.name}`}
+                                                onClick={() => void handleDeleteTab(tab.id, tab.name)}
+                                            >
+                                                ×
+                                            </button>
+                                        ) : null}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                    <button type="button" className={styles.addTabButton} aria-label="Opprett ny fane" onClick={() => void handleCreateTab()}>
+                        +
+                    </button>
+                </div>
+
+                <div className={styles.headerMeta}>
+                    <p className={styles.subtitle}>{activeItems.length} varer</p>
+                    <p className={styles.activeTabLabel}>{tabs.find((tab) => tab.id === activeTabId)?.name ?? "Handleliste"}</p>
+                </div>
+
                 {error ? <p className={styles.error}>{error}</p> : null}
+
                 <ul className={styles.toDoList}>
-                    {items.map((item) => (
+                    {activeItems.map((item) => (
                         <li key={item.id} className={styles.toDoList__item}>
                             <label className={styles.itemLabel}>
                                 <input
@@ -81,10 +154,11 @@ export default function Home() {
                         </li>
                     ))}
                 </ul>
+
                 <div className={styles.toDoInput}>
                     <input
                         type="text"
-                        placeholder="Legg til vare"
+                        placeholder={`Legg til vare i ${tabs.find((tab) => tab.id === activeTabId)?.name ?? "Handleliste"}`}
                         value={newItem}
                         onChange={(e) => setNewItem(e.target.value)}
                         onBlur={() => {
