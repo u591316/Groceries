@@ -1,179 +1,153 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import PullToRefresh from "pulltorefreshjs";
-import styles from "./page.module.css";
-import { DEFAULT_TAB_ID, useShoppingList } from "./useShoppingList";
+import { useEffect, useState } from "react";
+import { FirebaseError } from "firebase/app";
+import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db } from "./firebase";
+
+type Status =
+    | { kind: "idle" }
+    | { kind: "locating" }
+    | { kind: "saving" }
+    | { kind: "done"; latitude: number; longitude: number; accuracy: number }
+    | { kind: "error"; message: string };
+
+const LIST_ID = process.env.NEXT_PUBLIC_LIST_ID ?? "main";
+
+function formatCoord(value: number) {
+    return value.toFixed(5);
+}
+
+function geolocationErrorMessage(error: GeolocationPositionError) {
+    if (error.code === error.PERMISSION_DENIED) {
+        return "Du må gi tilgang til posisjon for at dette skal fungere.";
+    }
+    if (error.code === error.POSITION_UNAVAILABLE) {
+        return "Klarte ikke å finne posisjonen din akkurat nå.";
+    }
+    if (error.code === error.TIMEOUT) {
+        return "Det tok for lang tid å hente posisjon. Prøv igjen.";
+    }
+    return "Ukjent feil ved henting av posisjon.";
+}
 
 export default function Home() {
-    const { tabs, items, loading, error, addItem, toggleItem, deleteItem, createTab, deleteTab } = useShoppingList();
-    const [newItem, setNewItem] = useState("");
-    const [activeTabId, setActiveTabId] = useState(DEFAULT_TAB_ID);
-    const cleanedTabs = useRef<Set<string>>(new Set());
-
-    const activeItems = items.filter((item) => (item.tabId ?? DEFAULT_TAB_ID) === activeTabId);
-
-    async function submitNewItem() {
-        if (newItem.trim() === "") {
-            return;
-        }
-
-        await addItem(newItem, activeTabId);
-        setNewItem("");
-    }
-
-    async function handleCreateTab() {
-        const tabName = window.prompt("Hva skal fanen hete?");
-        if (!tabName) {
-            return;
-        }
-
-        const tabId = await createTab(tabName);
-        if (tabId) {
-            setActiveTabId(tabId);
-        }
-    }
-
-    async function handleDeleteTab(tabId: string, tabName: string) {
-        const confirmed = window.confirm(`Vil du slette fanen "${tabName}"?`);
-        if (!confirmed) {
-            return;
-        }
-
-        await deleteTab(tabId);
-        setActiveTabId(DEFAULT_TAB_ID);
-    }
+    const [status, setStatus] = useState<Status>({ kind: "idle" });
 
     useEffect(() => {
-        const standalone = window.matchMedia("(display-mode: standalone)").matches;
+        let cancelled = false;
 
-        if (standalone) {
-            PullToRefresh.init({
-                onRefresh() {
-                    window.location.reload();
-                },
-            });
+        async function share() {
+            if (typeof window === "undefined" || !("geolocation" in navigator)) {
+                if (!cancelled) {
+                    setStatus({ kind: "error", message: "Nettleseren støtter ikke geolokasjon." });
+                }
+                return;
+            }
+
+            try {
+                const user = await new Promise<import("firebase/auth").User>((resolve, reject) => {
+                    const unsubscribe = onAuthStateChanged(
+                        auth,
+                        (currentUser) => {
+                            if (currentUser) {
+                                unsubscribe();
+                                resolve(currentUser);
+                                return;
+                            }
+                            signInAnonymously(auth).catch((signinError) => {
+                                unsubscribe();
+                                reject(signinError);
+                            });
+                        },
+                        (authError) => {
+                            unsubscribe();
+                            reject(authError);
+                        }
+                    );
+                });
+
+                if (cancelled) return;
+                setStatus({ kind: "locating" });
+
+                const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 15000,
+                        maximumAge: 0,
+                    });
+                });
+
+                if (cancelled) return;
+                setStatus({ kind: "saving" });
+
+                const { latitude, longitude, accuracy } = position.coords;
+                await setDoc(doc(db, "lists", LIST_ID, "locations", user.uid), {
+                    latitude,
+                    longitude,
+                    accuracy,
+                    updatedAt: serverTimestamp(),
+                });
+
+                if (cancelled) return;
+                setStatus({ kind: "done", latitude, longitude, accuracy });
+            } catch (err) {
+                if (cancelled) return;
+                if (err && typeof err === "object" && "code" in err && "PERMISSION_DENIED" in err) {
+                    setStatus({ kind: "error", message: geolocationErrorMessage(err as GeolocationPositionError) });
+                    return;
+                }
+                if (err instanceof FirebaseError) {
+                    setStatus({ kind: "error", message: `Databasefeil (${err.code}).` });
+                    return;
+                }
+                setStatus({ kind: "error", message: "Noe gikk galt. Prøv å laste siden på nytt." });
+            }
         }
 
+        void share();
+
         return () => {
-            PullToRefresh.destroyAll();
+            cancelled = true;
         };
     }, []);
 
-    useEffect(() => {
-        const activeTabExists = tabs.some((tab) => tab.id === activeTabId);
-        if (!activeTabExists) {
-            setActiveTabId(DEFAULT_TAB_ID);
-        }
-    }, [activeTabId, tabs]);
-
-    useEffect(() => {
-        if (loading || cleanedTabs.current.has(activeTabId)) {
-            return;
-        }
-
-        cleanedTabs.current.add(activeTabId);
-        activeItems.forEach((item) => {
-            if (item.checked) {
-                void deleteItem(item.id);
-            }
-        });
-    }, [activeItems, activeTabId, deleteItem, loading]);
-
-    if (loading) {
-        return (
-            <main className={styles.page}>
-                <section className={styles.shell}>
-                    <p className={styles.loading}>Laster handleliste...</p>
-                </section>
-            </main>
-        );
-    }
-
     return (
-        <main className={styles.page}>
-            <section className={styles.shell}>
-                <div className={styles.tabsRow}>
-                    <div className={styles.tabsScroller}>
-                        <ul className={styles.tabs}>
-                            {tabs.map((tab) => {
-                                const isActive = tab.id === activeTabId;
+        <main
+            style={{
+                minHeight: "100dvh",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "2rem",
+                textAlign: "center",
+            }}
+        >
+            <div style={{ maxWidth: "28rem", width: "100%" }}>
+                {status.kind === "idle" || status.kind === "locating" ? (
+                    <p style={{ fontSize: "1.125rem" }}>Henter posisjon…</p>
+                ) : null}
 
-                                return (
-                                    <li
-                                        key={tab.id}
-                                        className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ""}`}
-                                    >
-                                        <button
-                                            type="button"
-                                            className={styles.tabButton}
-                                            onClick={() => setActiveTabId(tab.id)}
-                                        >
-                                            {tab.name}
-                                            {tab.id === DEFAULT_TAB_ID ? (
-                                                <span className={styles.titleEmoji}>👩‍❤️‍💋‍👨</span>
-                                            ) : null}
-                                        </button>
-                                        {!tab.isDefault ? (
-                                            <button
-                                                type="button"
-                                                className={styles.tabRemove}
-                                                aria-label={`Slett fanen ${tab.name}`}
-                                                onClick={() => void handleDeleteTab(tab.id, tab.name)}
-                                            >
-                                                ×
-                                            </button>
-                                        ) : null}
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
-                    <button type="button" className={styles.addTabButton} aria-label="Opprett ny fane" onClick={() => void handleCreateTab()}>
-                        +
-                    </button>
-                </div>
+                {status.kind === "saving" ? (
+                    <p style={{ fontSize: "1.125rem" }}>Sender posisjon…</p>
+                ) : null}
 
-                <div className={styles.headerMeta}>
-                    <p className={styles.subtitle}>{activeItems.length} varer</p>
-                    <p className={styles.activeTabLabel}>{tabs.find((tab) => tab.id === activeTabId)?.name ?? "Handleliste"}</p>
-                </div>
+                {status.kind === "done" ? (
+                    <>
+                        <p style={{ fontSize: "1.5rem", marginBottom: "0.75rem" }}>Posisjon delt 📍</p>
+                        <p style={{ fontFamily: "var(--font-geist-mono), monospace", fontSize: "0.95rem", opacity: 0.75 }}>
+                            {formatCoord(status.latitude)}, {formatCoord(status.longitude)}
+                        </p>
+                        <p style={{ fontSize: "0.85rem", opacity: 0.6, marginTop: "0.5rem" }}>
+                            Nøyaktighet: ±{Math.round(status.accuracy)} m
+                        </p>
+                    </>
+                ) : null}
 
-                {error ? <p className={styles.error}>{error}</p> : null}
-
-                <ul className={styles.toDoList}>
-                    {activeItems.map((item) => (
-                        <li key={item.id} className={styles.toDoList__item}>
-                            <label className={styles.itemLabel}>
-                                <input
-                                    type="checkbox"
-                                    checked={item.checked}
-                                    onChange={() => toggleItem(item.id, item.checked)}
-                                />
-                                <span className={`${styles.itemText} ${item.checked ? styles.itemTextChecked : ""}`}>{item.name}</span>
-                            </label>
-                        </li>
-                    ))}
-                </ul>
-
-                <div className={styles.toDoInput}>
-                    <input
-                        type="text"
-                        placeholder={`Legg til vare i ${tabs.find((tab) => tab.id === activeTabId)?.name ?? "Handleliste"}`}
-                        value={newItem}
-                        onChange={(e) => setNewItem(e.target.value)}
-                        onBlur={() => {
-                            if (newItem.trim() !== "") {
-                                void submitNewItem();
-                            }
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                void submitNewItem();
-                            }
-                        }}
-                    />
-                </div>
-            </section>
+                {status.kind === "error" ? (
+                    <p style={{ fontSize: "1.05rem", color: "#a23636" }}>{status.message}</p>
+                ) : null}
+            </div>
         </main>
     );
 }
